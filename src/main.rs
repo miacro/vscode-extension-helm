@@ -1,8 +1,12 @@
 use clap::arg;
-use clap::command;
+use clap::builder::TypedValueParser;
+use clap::Command;
+use clap::CommandFactory;
+use clap::FromArgMatches;
 use clap::Parser;
 use env_logger;
 use log;
+use std::env;
 use std::error::Error;
 use std::path::PathBuf;
 
@@ -19,7 +23,7 @@ Example:
 ";
 
 #[derive(Parser, Debug)]
-#[command(version, about = "Download the vscode vsix extensions", after_help = HELP_ALL)]
+#[command(version, about = "Download the vscode vsix extensions", after_help = &HELP_ALL)]
 struct Args {
     #[arg(long, help = HELP_EXTENSIONS)]
     extensions: String,
@@ -32,9 +36,22 @@ struct Args {
 }
 
 fn main() {
-    let args = Args::parse();
-    println!(
-        "path: {}, download_dir: {}",
-        args.extensions, args.download_dir
-    );
+    let args: Vec<String> = env::args().collect();
+    let prog_name: String = String::from(&args[0]);
+    let help_all = str::replace(HELP_ALL, "{}", &prog_name);
+    let command = <Args as CommandFactory>::command().after_help(help_all);
+    let mut matches = command.get_matches();
+    let res = <Args as FromArgMatches>::from_arg_matches_mut(&mut matches).map_err(|err| err);
+    match res {
+        Ok(args) => {
+            println!(
+                "path: {}, download_dir: {}",
+                args.extensions, args.download_dir
+            );
+            args;
+        }
+        Err(e) => {
+            e.exit();
+        }
+    }
 }
