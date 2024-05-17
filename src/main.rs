@@ -5,8 +5,10 @@ use std::error::Error;
 use std::path::PathBuf;
 
 mod cli;
+mod extension;
 
 fn main() {
     let args = cli::load_args();
-    dbg!(args);
+    dbg!(&args);
+    let extensions = extension::list_extensions(&args.extensions);
 }

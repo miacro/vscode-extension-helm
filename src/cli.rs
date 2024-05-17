@@ -1,5 +1,5 @@
 use clap::arg;
-use clap::builder::{BoolValueParser, BoolishValueParser, TypedValueParser};
+use clap::builder::{BoolValueParser, BoolishValueParser, TypedValueParser, ArgAction};
 use clap::{Command, CommandFactory, FromArgMatches, Parser};
 use std::env;
 
@@ -18,23 +18,29 @@ Example:
 #[derive(Parser, Debug)]
 #[command(version, about = "Download the vscode vsix extensions", after_help = &HELP_ALL)]
 pub struct Args {
-    #[arg(long, required = true, help = HELP_EXTENSIONS)]
-    extensions: String,
+    #[arg(
+        long, 
+        required = true,
+        num_args = 1..,
+        action = ArgAction::Append,
+        help = HELP_EXTENSIONS,
+    )]
+    pub extensions: Vec<String>,
     #[arg(
         long,
         default_value = "./vscode-vsix",
         help = "the download dir, default: ./vscode-vsix"
     )]
-    download_dir: String,
+    pub download_dir: String,
     #[arg(
         long,
         value_parser = BoolishValueParser::new(),
         default_value = "true", 
         help = "use file cache or not, default: True",
     )]
-    cached: Option<bool>,
+    pub cached: Option<bool>,
     #[arg(long, default_value = "false", help = "show more debug messages")]
-    verbose: bool,
+    pub verbose: bool,
 }
 
 pub fn load_args() -> Args {
