@@ -11,4 +11,6 @@ fn main() {
     let args = cli::load_args();
     dbg!(&args);
     let extensions = extension::list_extensions(&args.extensions);
+    dbg!(extensions);
+    return;
 }
