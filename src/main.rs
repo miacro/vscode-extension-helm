@@ -11,6 +11,8 @@ fn main() {
     let args = cli::load_args();
     dbg!(&args);
     let extensions = extension::list_extensions(&args.extensions);
-    dbg!(extensions);
+    for extension in &extensions {
+        extension.download(&args.download_dir, args.cached);
+    }
     return;
 }

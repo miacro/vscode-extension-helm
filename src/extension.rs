@@ -1,8 +1,10 @@
-use once_cell::sync::Lazy;
+use anyhow::{Context, Result};
+use reqwest::{self, Version};
+use serde_json::from_str as json_from_str;
+use serde_json::json;
+use serde_json::value as json_value;
 use shellexpand;
-use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::env;
+use std::error::Error;
 use std::fs::{self};
 use std::path::Path;
 
@@ -13,21 +15,95 @@ pub struct Extension {
     version: Option<String>,
     platform: Option<String>,
 }
-static HEADERS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
-    HashMap::from([
-        ("Content-Type", "application/json"),
-        ("Accept", "application/json;api-version=3.0-preview.1"),
-        ("User-Agent", "Offline VSIX/1.0"),
-    ])
-});
 static QUERY_URL: &str = "https://marketplace.visualstudio.com/_apis/public/gallery/extensionQuery";
 
 impl Extension {
-    pub fn download(self, download_dir: &String, cached: bool) -> bool {
+    pub fn get_extension_name(&self) -> String {
+        get_extension_name(
+            self.publisher.as_ref(),
+            self.package.as_ref(),
+            self.version.as_ref().map(|x| x.as_str()),
+            self.platform.as_ref().map(|x| x.as_str()),
+        )
+    }
+    pub fn download(&self, download_dir: &String, cached: Option<bool>) -> bool {
+        let cached = match cached {
+            Some(val) => val,
+            None => true,
+        };
+        let data = self.query_version();
         true
     }
-    pub fn query_info(self) -> (Option<String>, Option<String>) {
-        (None, None)
+
+    pub fn query_version(&self) -> Result<(Option<&str>, Option<&str>), Box<dyn Error>> {
+        let ext_name = get_extension_name(&self.publisher, &self.package, None, None);
+        let data = query_extension(&self.publisher, &self.package, None)?;
+        Err("test".into())
+    }
+}
+
+pub fn get_extension_name(
+    publisher: &str,
+    package: &str,
+    version: Option<&str>,
+    platform: Option<&str>,
+) -> String {
+    let ext_name = format!("{}.{}", publisher, package);
+    let ext_name = match version {
+        Some(val) => format!("{}@{}", ext_name, val),
+        None => ext_name,
+    };
+    let ext_name = match platform {
+        Some(val) => format!("{}={}", ext_name, val),
+        None => ext_name,
+    };
+    ext_name
+}
+
+pub fn query_extension(
+    publisher: &str,
+    package: &str,
+    flags: Option<usize>,
+) -> Result<json_value::Value, Box<dyn Error>> {
+    let flags = match flags {
+        Some(flags) => flags,
+        None => 0x55,
+    };
+    let ext_name = get_extension_name(publisher, package, None, None);
+    let filters = json!([{
+        "criteria": [{"filterType": 7, "value": ext_name}],
+        "pageNumber": 1,
+        "pageSize": 10,
+    }]);
+    let payload = json!({
+        "flags": flags,
+        "filters":filters,
+    });
+    let client = reqwest::blocking::Client::new();
+    let mut request = client.post(QUERY_URL);
+    let headers = vec![
+        ("Content-Type", "application/json"),
+        ("Accept", "application/json;api-version=3.0-preview.1"),
+        ("User-Agent", "Offline VSIX/1.0"),
+    ];
+    for (key, val) in headers {
+        request = request.header(key, val);
+    }
+    request = request.json(&payload);
+    let response = request.send()?;
+    let response = response.error_for_status();
+    let data = response
+        .map_or_else(|x| Err(x), |x| x.json().map(|x: json_value::Value| x))
+        .context(format!("query extension {} info failed", &ext_name))?;
+    let data = data
+        .get("results")
+        .map_or(None, |x| x.get(0))
+        .map_or(None, |x| x.get("extensions"))
+        .map_or(None, |x| x.get(0));
+    dbg!(&data);
+    match data {
+        Some(val) => Ok(val.clone()),
+        None => Err("no data found in query response".into()),
     }
 }
 
@@ -39,24 +115,22 @@ pub fn list_extensions(extensions: &Vec<String>) -> Vec<Extension> {
             None => (line, None),
         }
     }
-    fn parse_ext_line(ext_line: &str) -> Extension {
+    fn parse_ext_line(ext_line: &str) -> Option<Extension> {
         let ext_line = ext_line.trim();
         let (ext_prefix, platform) = strip_suffix(ext_line, "=");
         let (ext_prefix, version) = strip_suffix(ext_prefix, "@");
         let (publisher, package) = strip_suffix(ext_prefix, ".");
-        let package = package.unwrap_or_else(|| {
-            panic!("Invalid package: {}", ext_line);
-        });
-        Extension {
+        let package = package?;
+        Some(Extension {
             package: package.to_string(),
             publisher: publisher.to_string(),
             platform: platform.map(str::to_string),
             version: version.map(str::to_string),
-        }
+        })
     }
-    fn parse_ext_dict(ext_dict: &serde_json::value::Value) -> Option<Extension> {
+    fn parse_ext_dict(ext_dict: &json_value::Value) -> Option<Extension> {
         let identifier = ext_dict.get("identifier")?;
-        let ext_name = identifier.get("id")?.as_str().unwrap();
+        let ext_name = identifier.get("id")?.as_str()?;
         let version = match ext_dict.get("version") {
             Some(ver) => ver.as_str().map(str::to_string),
             None => None,
@@ -79,25 +153,28 @@ pub fn list_extensions(extensions: &Vec<String>) -> Vec<Extension> {
             None => None,
         };
         let ext = parse_ext_line(&String::from(ext_name));
-        Some(Extension {
+        ext.map(|x| Extension {
             platform,
             version,
-            ..ext
+            ..x
         })
     }
     let mut result: Vec<Extension> = vec![];
     for extension in extensions {
-        let ext_path = shellexpand::full(extension)
-            .map(|x| x.to_string())
-            .expect(&extension);
+        let ext_path = shellexpand::full(extension);
+        let ext_path = ext_path.map_or(extension.clone(), |x| x.to_string());
         if !Path::new(&ext_path).exists() {
             let ext = parse_ext_line(&ext_path);
-            result.push(ext);
+            if let Some(ext) = ext {
+                result.push(ext)
+            }
             continue;
         }
-        let content = fs::read_to_string(&extension).unwrap();
+        let content = fs::read_to_string(&ext_path)
+            .expect(format!("read file {} failed", &ext_path).as_str());
         if vec!["[", "{"].iter().any(|x| content.starts_with(x)) {
-            let data: serde_json::value::Value = serde_json::from_str(&content).unwrap();
+            let data: json_value::Value = json_from_str(&content)
+                .expect(format!("parse json failed from {}", ext_path).as_str());
             if let Some(data) = data.as_array() {
                 for item in data {
                     let ext = parse_ext_dict(item);
@@ -116,7 +193,9 @@ pub fn list_extensions(extensions: &Vec<String>) -> Vec<Extension> {
         } else {
             for line in content.split("\n") {
                 let ext = parse_ext_line(line);
-                result.push(ext);
+                if let Some(ext) = ext {
+                    result.push(ext);
+                }
             }
         }
     }
