@@ -37,7 +37,33 @@ impl Extension {
 
     pub fn query_version(&self) -> Result<(Option<&str>, Option<&str>), Box<dyn Error>> {
         let ext_name = get_extension_name(&self.publisher, &self.package, None, None);
-        let data = query_extension(&self.publisher, &self.package, None)?;
+        let all_data = query_extension(&self.publisher, &self.package, None)?;
+        let version = all_data
+            .get("versions")
+            .map_or(None, |x| x.as_array())
+            .map(|x| {
+                for ver_data in x {
+                    let version = ver_data.get("version").map_or(None, |x| x.as_str());
+                    let platform = ver_data.get("targetPlatform").map_or(None, |x| x.as_str());
+                    let version = match version {
+                        Some(v) => v,
+                        None => continue,
+                    };
+                    if let Some(v) = &self.version {
+                        if v.as_str() != version {
+                            continue;
+                        }
+                    }
+                    match (self.platform.as_ref(), platform) {
+                        (Some(v1), Some(v2)) => {
+                            if v1 != v2 {
+                                continue;
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+            });
         Err("test".into())
     }
 }
