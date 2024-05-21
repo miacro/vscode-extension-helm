@@ -32,39 +32,56 @@ impl Extension {
             None => true,
         };
         let data = self.query_version();
+        dbg!(data);
         true
     }
 
-    pub fn query_version(&self) -> Result<(Option<&str>, Option<&str>), Box<dyn Error>> {
-        let ext_name = get_extension_name(&self.publisher, &self.package, None, None);
+    pub fn query_version(&self) -> Result<(Option<String>, Option<String>), Box<dyn Error>> {
         let all_data = query_extension(&self.publisher, &self.package, None)?;
-        let version = all_data
+        dbg!(&all_data);
+        let (version, platform): (Option<String>, Option<String>) = all_data
             .get("versions")
             .map_or(None, |x| x.as_array())
-            .map(|x| {
+            .map_or((None, None), |x| {
                 for ver_data in x {
                     let version = ver_data.get("version").map_or(None, |x| x.as_str());
                     let platform = ver_data.get("targetPlatform").map_or(None, |x| x.as_str());
-                    let version = match version {
-                        Some(v) => v,
-                        None => continue,
-                    };
-                    if let Some(v) = &self.version {
-                        if v.as_str() != version {
+                    let version = match (self.version.as_ref(), version) {
+                        (Some(v1), Some(v2)) => {
+                            if v1 != v2 {
+                                continue;
+                            }
+                            Some(v2.to_string())
+                        }
+                        (_, None) => {
                             continue;
                         }
-                    }
+                        (_, Some(v2)) => Some(v2.to_string()),
+                    };
                     match (self.platform.as_ref(), platform) {
                         (Some(v1), Some(v2)) => {
                             if v1 != v2 {
                                 continue;
                             }
+                            return (version, Some(v2.to_string()));
                         }
-                        _ => continue,
+                        (None, Some(_)) => {
+                            continue;
+                        }
+                        _ => {
+                            return (version, None);
+                        }
                     }
                 }
+                return (None, None);
             });
-        Err("test".into())
+        if let None = version {
+            let ext_name = get_extension_name(&self.publisher, &self.package, None, None);
+            let message = format!("query extension {} for version failed", ext_name);
+            Err(message.into())
+        } else {
+            Ok((version, platform))
+        }
     }
 }
 
@@ -126,7 +143,6 @@ pub fn query_extension(
         .map_or(None, |x| x.get(0))
         .map_or(None, |x| x.get("extensions"))
         .map_or(None, |x| x.get(0));
-    dbg!(&data);
     match data {
         Some(val) => Ok(val.clone()),
         None => Err("no data found in query response".into()),
