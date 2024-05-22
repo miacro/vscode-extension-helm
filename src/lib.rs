@@ -1,2 +1,2 @@
-mod extension;
 mod cli;
+mod extension;

@@ -1,5 +1,5 @@
 use clap::arg;
-use clap::builder::{BoolValueParser, BoolishValueParser, TypedValueParser, ArgAction};
+use clap::builder::{ArgAction, BoolValueParser, BoolishValueParser, TypedValueParser};
 use clap::{Command, CommandFactory, FromArgMatches, Parser};
 use std::env;
 
@@ -19,7 +19,7 @@ Example:
 #[command(version, about = "Download the vscode vsix extensions", after_help = &HELP_ALL)]
 pub struct Args {
     #[arg(
-        long, 
+        long,
         required = true,
         num_args = 1..,
         action = ArgAction::Append,

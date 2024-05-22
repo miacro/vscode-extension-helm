@@ -8,6 +8,7 @@ mod cli;
 mod extension;
 
 fn main() {
+    env_logger::init();
     let args = cli::load_args();
     dbg!(&args);
     let extensions = extension::list_extensions(&args.extensions);

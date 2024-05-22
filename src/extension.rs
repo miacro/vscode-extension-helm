@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use log::{debug, error, info};
 use reqwest::{self, Version};
 use serde_json::from_str as json_from_str;
 use serde_json::json;
@@ -16,6 +17,7 @@ pub struct Extension {
     platform: Option<String>,
 }
 static QUERY_URL: &str = "https://marketplace.visualstudio.com/_apis/public/gallery/extensionQuery";
+static DOWNLOAD_URL: &str = "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/{}/vsextensions/{}/{}/vspackage";
 
 impl Extension {
     pub fn get_extension_name(&self) -> String {
@@ -26,19 +28,37 @@ impl Extension {
             self.platform.as_ref().map(|x| x.as_str()),
         )
     }
-    pub fn download(&self, download_dir: &String, cached: Option<bool>) -> bool {
+    pub fn download(
+        &self,
+        download_dir: &String,
+        cached: Option<bool>,
+    ) -> Result<bool, Box<dyn Error>> {
         let cached = match cached {
             Some(val) => val,
             None => true,
         };
-        let data = self.query_version();
-        dbg!(data);
-        true
+        let ext_name = self.get_extension_name();
+        let (version, platform) = self.query_version()?;
+        let version = match version {
+            Some(ver) => ver,
+            None => {
+                return Err(format!("query version for {} failed", &ext_name).into());
+            }
+        };
+        let output_file = format!("{}/{}.vsix", download_dir, &ext_name);
+        download_extension(
+            &self.publisher,
+            &self.package,
+            &version,
+            platform.as_ref().map(|x| x.as_str()),
+            &output_file,
+            cached,
+        );
+        Ok(true)
     }
 
     pub fn query_version(&self) -> Result<(Option<String>, Option<String>), Box<dyn Error>> {
         let all_data = query_extension(&self.publisher, &self.package, None)?;
-        dbg!(&all_data);
         let (version, platform): (Option<String>, Option<String>) = all_data
             .get("versions")
             .map_or(None, |x| x.as_array())
@@ -147,6 +167,25 @@ pub fn query_extension(
         Some(val) => Ok(val.clone()),
         None => Err("no data found in query response".into()),
     }
+}
+
+pub fn download_extension(
+    publisher: &str,
+    package: &str,
+    version: &str,
+    platform: Option<&str>,
+    output_file: &str,
+    cached: bool,
+) {
+    let ext_name = get_extension_name(publisher, package, Some(version), platform);
+    let download_url = DOWNLOAD_URL.replacen("{}", publisher, 1);
+    let download_url = download_url.replacen("{}", package, 1);
+    let mut download_url = download_url.replacen("{}", version, 1);
+    if let Some(val) = platform {
+        download_url = format!("{}?targetPlatform={}", download_url, val);
+    }
+    //info!("Downloading {}:\nURL: {}", &ext_name, &download_url);
+    println!("Downloading {}:\nURL: {}", &ext_name, &download_url);
 }
 
 pub fn list_extensions(extensions: &Vec<String>) -> Vec<Extension> {
