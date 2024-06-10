@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
-use log::{debug, error, info};
-use reqwest::{self, Version};
+use reqwest::{self};
 use serde_json::from_str as json_from_str;
 use serde_json::json;
 use serde_json::value as json_value;
@@ -8,6 +7,7 @@ use shellexpand;
 use std::error::Error;
 use std::fs::{self};
 use std::path::Path;
+use std::process::Command;
 
 #[derive(Debug)]
 pub struct Extension {
@@ -46,7 +46,7 @@ impl Extension {
             }
         };
         let output_file = format!("{}/{}.vsix", download_dir, &ext_name);
-        download_extension(
+        let result = download_extension(
             &self.publisher,
             &self.package,
             &version,
@@ -54,7 +54,10 @@ impl Extension {
             &output_file,
             cached,
         );
-        Ok(true)
+        match result {
+            Ok(()) => Ok(true),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn query_version(&self) -> Result<(Option<String>, Option<String>), Box<dyn Error>> {
@@ -176,7 +179,7 @@ pub fn download_extension(
     platform: Option<&str>,
     output_file: &str,
     cached: bool,
-) {
+) -> Result<(), Box<dyn Error>> {
     let ext_name = get_extension_name(publisher, package, Some(version), platform);
     let download_url = DOWNLOAD_URL.replacen("{}", publisher, 1);
     let download_url = download_url.replacen("{}", package, 1);
@@ -186,6 +189,44 @@ pub fn download_extension(
     }
     //info!("Downloading {}:\nURL: {}", &ext_name, &download_url);
     println!("Downloading {}:\nURL: {}", &ext_name, &download_url);
+    let head_file = format!("{}.header", output_file);
+    let body_file = format!("{}.downloading", output_file);
+    let mut curl_args = vec!["-fSL"];
+    if cached {
+        curl_args.extend(["-C", "-f"]);
+    }
+    curl_args.extend([
+        &download_url,
+        "-o",
+        body_file.as_str(),
+        "-D",
+        head_file.as_str(),
+    ]);
+    let mut command = Command::new("curl");
+    command.args(curl_args);
+    let status = command.status();
+    match status {
+        Ok(status) => {
+            println!("status: {}", status);
+            if status.success() {
+                Ok(())
+            } else {
+                let args = command.get_args().map(|x| x.to_str().map_or("", |x| x));
+                let args: Vec<&str> = args.collect();
+                let args = args.join(" ");
+                Err(format!(
+                    "exec command {} {} failed",
+                    command.get_program().to_str().map_or("", |x| x),
+                    args
+                )
+                .into())
+            }
+        }
+        Err(e) => {
+            println!("command error: {}", e);
+            return Err(e.into());
+        }
+    }
 }
 
 pub fn list_extensions(extensions: &Vec<String>) -> Vec<Extension> {
