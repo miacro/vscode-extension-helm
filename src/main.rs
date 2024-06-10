@@ -1,7 +1,6 @@
 use env_logger;
 use log::{self, error, warn};
 use std::env;
-use std::error::Error;
 
 mod cli;
 mod extension;

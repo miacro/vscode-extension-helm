@@ -1,11 +1,15 @@
 use anyhow::{Context, Result};
+use flate2::read::GzDecoder;
 use reqwest::{self};
 use serde_json::from_str as json_from_str;
 use serde_json::json;
 use serde_json::value as json_value;
 use shellexpand;
 use std::error::Error;
-use std::fs::{self};
+use std::fs::read_to_string;
+use std::fs::{self, File};
+use std::io::Read;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
@@ -193,7 +197,7 @@ pub fn download_extension(
     let body_file = format!("{}.downloading", output_file);
     let mut curl_args = vec!["-fSL"];
     if cached {
-        curl_args.extend(["-C", "-f"]);
+        curl_args.extend(["-C", "-"]);
     }
     curl_args.extend([
         &download_url,
@@ -202,31 +206,46 @@ pub fn download_extension(
         "-D",
         head_file.as_str(),
     ]);
-    let mut command = Command::new("curl");
+    let prog_name = String::from("curl");
+    let mut command = Command::new(&prog_name);
     command.args(curl_args);
     let status = command.status();
     match status {
         Ok(status) => {
-            println!("status: {}", status);
-            if status.success() {
-                Ok(())
-            } else {
+            if !status.success() {
                 let args = command.get_args().map(|x| x.to_str().map_or("", |x| x));
                 let args: Vec<&str> = args.collect();
                 let args = args.join(" ");
-                Err(format!(
-                    "exec command {} {} failed",
-                    command.get_program().to_str().map_or("", |x| x),
-                    args
-                )
-                .into())
+                return Err(format!("exec command {} {} failed", prog_name, args).into());
             }
         }
         Err(e) => {
             println!("command error: {}", e);
             return Err(e.into());
         }
+    };
+    let mut encoding = String::from("");
+    for line in read_to_string(&head_file)?.lines() {
+        let line = line.trim().to_lowercase();
+        if line.starts_with("content-encoding") {
+            let data: Vec<&str> = line.split(":").collect();
+            encoding = data[data.len() - 1].to_string();
+        }
     }
+    let mut f_i = File::open(&body_file)?;
+    let mut data = vec![];
+    f_i.read_to_end(&mut data)?;
+    if encoding.contains("gzip") {
+        let mut gz = GzDecoder::new(&data[..]);
+        let mut decoded = vec![];
+        gz.read_to_end(&mut decoded)?;
+        data = decoded;
+    }
+    let mut f_o = File::create(&output_file)?;
+    f_o.write_all(&data)?;
+    fs::remove_file(body_file)?;
+    fs::remove_file(head_file)?;
+    Ok(())
 }
 
 pub fn list_extensions(extensions: &Vec<String>) -> Vec<Extension> {

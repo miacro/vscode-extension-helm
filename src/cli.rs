@@ -1,6 +1,6 @@
 use clap::arg;
-use clap::builder::{ArgAction, BoolValueParser, BoolishValueParser, TypedValueParser};
-use clap::{Command, CommandFactory, FromArgMatches, Parser};
+use clap::builder::{ArgAction, BoolishValueParser};
+use clap::{CommandFactory, FromArgMatches, Parser};
 use std::env;
 
 const HELP_EXTENSIONS: &str = "list of extensions to be downloaded, each is one of the following:
