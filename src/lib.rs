@@ -1,2 +1,2 @@
-mod cli;
-mod extension;
+pub mod cli;
+pub mod extension;
