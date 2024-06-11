@@ -23,7 +23,7 @@ fn main() {
         let success = match result {
             Ok(success) => success,
             Err(e) => {
-                error!("{}", e);
+                error!("{:#?}", e);
                 false
             }
         };
