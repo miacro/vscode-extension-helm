@@ -1,6 +1,6 @@
 use env_logger;
-use log::{self, error, warn};
-use std::env;
+use log::{self, error, info, warn};
+use std::{env, vec};
 
 mod cli;
 mod extension;
@@ -17,6 +17,7 @@ fn main() {
     });
     env_logger::init();
     let extensions = extension::list_extensions(&args.extensions);
+    let mut failed: Vec<String> = vec![];
     for extension in &extensions {
         let result = extension.download(&args.download_dir, args.cached);
         let success = match result {
@@ -26,12 +27,16 @@ fn main() {
                 false
             }
         };
+        let ext_name = extension.get_extension_name();
         if !success {
-            warn!(
-                "download extension {} failed",
-                extension.get_extension_name()
-            )
+            warn!("download extension {} failed", &ext_name);
+            failed.push(ext_name);
         }
+    }
+    if failed.len() > 0 {
+        error!("Download some failed:\n{}", failed.join(" "));
+    } else {
+        info!("Download all succeed");
     }
     return;
 }
