@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
+use log::debug;
 use reqwest::{self};
 use serde_json::from_str as json_from_str;
 use serde_json::json;
@@ -11,6 +12,7 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::io::Write;
 use std::path::Path;
+use std::path::MAIN_SEPARATOR;
 use std::process::Command;
 
 #[derive(Debug)]
@@ -49,7 +51,7 @@ impl Extension {
                 return Err(format!("query version for {} failed", &ext_name).into());
             }
         };
-        let output_file = format!("{}/{}.vsix", download_dir, &ext_name);
+        let output_file = format!("{}{}{}.vsix", download_dir, MAIN_SEPARATOR, &ext_name);
         let result = download_extension(
             &self.publisher,
             &self.package,
@@ -191,8 +193,7 @@ pub fn download_extension(
     if let Some(val) = platform {
         download_url = format!("{}?targetPlatform={}", download_url, val);
     }
-    //info!("Downloading {}:\nURL: {}", &ext_name, &download_url);
-    println!("Downloading {}:\nURL: {}", &ext_name, &download_url);
+    debug!("Downloading {}:\nURL: {}", &ext_name, &download_url);
     let head_file = format!("{}.header", output_file);
     let body_file = format!("{}.downloading", output_file);
     let mut curl_args = vec!["-fSL"];
@@ -220,7 +221,6 @@ pub fn download_extension(
             }
         }
         Err(e) => {
-            println!("command error: {}", e);
             return Err(e.into());
         }
     };
