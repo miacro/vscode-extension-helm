@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use flate2::read::GzDecoder;
-use log::debug;
+use log::{debug, info};
 use reqwest::{self};
 use serde_json::from_str as json_from_str;
 use serde_json::json;
@@ -34,6 +34,42 @@ impl Extension {
             self.platform.as_ref().map(|x| x.as_str()),
         )
     }
+
+    pub fn check_platform(&self) -> Result<(), Box<dyn Error>> {
+        let valid_platforms = vec![
+            ("win32-x64", "Windows x64"),
+            ("win32-ia32", "Windows ia32"),
+            ("win32-arm64", "Windows ARM"),
+            ("linux-x64", "Linux x64"),
+            ("linux-arm64", "Linux ARM64"),
+            ("linux-armhf", "Linux ARM32"),
+            ("darwin-x64", "macOS Intel"),
+            ("darwin-arm64", "macOS Apple Silicon"),
+            ("alpine-x64", "Alpine Linux 64 bit"),
+            ("web", "Web"),
+            ("alpine-arm64", "Alpine Linux ARM64"),
+        ];
+        let passed = match &self.platform {
+            None => true,
+            Some(platform) => valid_platforms.iter().any(|x| platform == x.0),
+        };
+        if passed {
+            Ok(())
+        } else {
+            let choices = valid_platforms
+                .iter()
+                .map(|x| x.0)
+                .collect::<Vec<&str>>()
+                .join(", ");
+            let message = format!(
+                "invalid platform {}, choices in ({})",
+                self.platform.as_ref().unwrap(),
+                choices
+            );
+            Err(message.into())
+        }
+    }
+
     pub fn download(
         &self,
         download_dir: &String,
@@ -43,6 +79,7 @@ impl Extension {
             Some(val) => val,
             None => true,
         };
+        self.check_platform()?;
         let ext_name = self.get_extension_name();
         let (version, platform) = self.query_version()?;
         let version = match version {
@@ -52,6 +89,11 @@ impl Extension {
             }
         };
         let output_file = format!("{}{}{}.vsix", download_dir, MAIN_SEPARATOR, &ext_name);
+        if cached && Path::new(&output_file).exists() {
+            info!("{output_file} already exists, skip downloading");
+            return Ok(false);
+        }
+        fs::create_dir_all(download_dir)?;
         let result = download_extension(
             &self.publisher,
             &self.package,

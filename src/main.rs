@@ -21,9 +21,9 @@ fn main() {
     for extension in &extensions {
         let result = extension.download(&args.download_dir, args.cached);
         let success = match result {
-            Ok(success) => success,
+            Ok(_) => true,
             Err(e) => {
-                error!("{:#?}", e);
+                error!("caught error: {:#?}", e);
                 false
             }
         };
