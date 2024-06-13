@@ -81,11 +81,17 @@ impl Extension {
         };
         self.check_platform()?;
         let ext_name = self.get_extension_name();
-        let (version, platform) = self.query_version()?;
-        let version = match version {
-            Some(ver) => ver,
+        let (version, platform) = match &self.version {
+            Some(v) => (v.clone(), self.platform.clone()),
             None => {
-                return Err(format!("query version for {} failed", &ext_name).into());
+                let (v, p) = self.query_version()?;
+                let v = match v {
+                    Some(v) => v,
+                    None => {
+                        return Err(format!("query version for {} failed", &ext_name).into());
+                    }
+                };
+                (v, p.clone())
             }
         };
         let output_file = format!("{}{}{}.vsix", download_dir, MAIN_SEPARATOR, &ext_name);
@@ -98,7 +104,7 @@ impl Extension {
             &self.publisher,
             &self.package,
             &version,
-            platform.as_ref().map(|x| x.as_str()),
+            platform.as_deref(),
             &output_file,
             cached,
         );
@@ -300,6 +306,10 @@ pub fn list_extensions(extensions: &Vec<String>) -> Vec<Extension> {
     }
     fn parse_ext_line(ext_line: &str) -> Option<Extension> {
         let ext_line = ext_line.trim();
+        let ext_line = match ext_line.strip_suffix(".vsix") {
+            Some(v) => v,
+            None => ext_line,
+        };
         let (ext_prefix, platform) = strip_suffix(ext_line, "=");
         let (ext_prefix, version) = strip_suffix(ext_prefix, "@");
         let (publisher, package) = strip_suffix(ext_prefix, ".");
@@ -382,5 +392,7 @@ pub fn list_extensions(extensions: &Vec<String>) -> Vec<Extension> {
             }
         }
     }
+    result.sort_by(|a, b| a.get_extension_name().cmp(&b.get_extension_name()));
+    result.dedup_by_key(|x| x.get_extension_name());
     result
 }
