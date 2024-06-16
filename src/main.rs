@@ -1,3 +1,4 @@
+use cli::{ExtensionArgs, PortalArgs, PortalSubcommand, ServerArgs};
 use env_logger;
 use log::{self, debug, error, info, warn};
 use std::{env, vec};
@@ -16,6 +17,18 @@ fn main() {
     });
     env_logger::init();
     debug!("args: {:#?}", &args);
+    match &args.command {
+        PortalSubcommand::Extension(v) => {
+            download_extensions(&v);
+        }
+        PortalSubcommand::Server(v) => {
+            download_server(&v);
+        }
+    }
+    return;
+}
+
+fn download_extensions(args: &ExtensionArgs) {
     let extensions = extension::list_extensions(&args.extensions);
     let mut failed: Vec<String> = vec![];
     for extension in &extensions {
@@ -40,3 +53,5 @@ fn main() {
     }
     return;
 }
+
+fn download_server(args: &ServerArgs) {}
