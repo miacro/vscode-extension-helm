@@ -28,8 +28,8 @@ pub struct ExtensionArgs {
     pub extensions: Vec<String>,
     #[arg(
         long,
-        default_value = "./vscode-vsix",
-        help = "the download dir, default: ./vscode-vsix"
+        default_value = "vscode-vsix",
+        help = "the download dir, default: vscode-vsix"
     )]
     pub download_dir: String,
     #[arg(
@@ -56,7 +56,7 @@ pub struct ServerArgs {
     pub arch: Option<String>,
     #[arg(long, help = "the commit id")]
     pub commit: Option<String>,
-    #[arg(long, help = "the output dir", default_value = "./")]
+    #[arg(long, help = "the output dir", default_value = ".")]
     pub output_dir: Option<String>,
 }
 

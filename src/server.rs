@@ -76,6 +76,8 @@ pub fn download_release_file(
     arch: &String,
     archive_file: &String,
 ) -> Result<(), Box<dyn Error>> {
+    debug!("download vscode server release file to {}", &archive_file);
+    debug!("{} {} {}", commit, prefix, arch);
     Ok(())
 }
 
@@ -84,5 +86,6 @@ pub fn prepare_release_dir(
     archive_file: &String,
     output_dir: &String,
 ) -> Result<(), Box<dyn Error>> {
+    debug!("{} {} {}", commit, archive_file, output_dir);
     Ok(())
 }
