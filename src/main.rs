@@ -1,10 +1,12 @@
-use cli::{ExtensionArgs, PortalArgs, PortalSubcommand, ServerArgs};
+use cli::{ExtensionArgs, PortalSubcommand, ServerArgs};
 use env_logger;
 use log::{self, debug, error, info, warn};
+use std::path::MAIN_SEPARATOR;
 use std::{env, vec};
 
 mod cli;
 mod extension;
+mod server;
 
 fn main() {
     let args = cli::load_args();
@@ -54,4 +56,47 @@ fn download_extensions(args: &ExtensionArgs) {
     return;
 }
 
-fn download_server(args: &ServerArgs) {}
+fn download_server(args: &ServerArgs) {
+    let (platform, arch) = server::get_platform_info(&args.platform, &args.arch);
+    let mut commit = String::from("");
+    let mut prefix = String::from("");
+    let mut archive_file = String::from("");
+    let output_dir = args.output_dir.as_ref().map_or(".".into(), |x| x.clone());
+    let res = args
+        .commit
+        .as_ref()
+        .map_or_else(
+            || server::get_latest_release(&platform, &arch),
+            |x| Ok(x.into()),
+        )
+        .map_or_else(
+            |e| Err(e),
+            |v| {
+                prefix = match platform.as_str() {
+                    "alpine" => format!("cli-{}", &platform),
+                    _ => format!("server-{}", &platform),
+                };
+                commit = v;
+                Ok(())
+            },
+        )
+        .map_or_else(
+            |e| Err(e),
+            |_| {
+                let archive_name = format!("vscode-{}-{}-{}.tar.gz", &prefix, &arch, &commit);
+                archive_file = format!("{}{}{}", &output_dir, MAIN_SEPARATOR, &archive_name);
+                server::download_release_file(&commit, &prefix, &arch, &archive_file)
+            },
+        )
+        .map_or_else(
+            |e| Err(e),
+            |_| server::prepare_release_dir(&commit, &archive_file, &output_dir),
+        );
+    match res {
+        Ok(_) => (),
+        Err(e) => {
+            error!("caught error: {:#?}", e);
+            ()
+        }
+    }
+}

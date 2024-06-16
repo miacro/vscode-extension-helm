@@ -44,14 +44,20 @@ pub struct ExtensionArgs {
 #[derive(Args, Debug)]
 #[command(about = "Download the vscode server")]
 pub struct ServerArgs {
-    #[arg(long, required = true)]
-    pub platform: String,
-    #[arg(long, required = true)]
-    pub arch: String,
-    #[arg(long, required = true)]
-    pub commit: String,
-    #[arg(long, required = true)]
-    pub output_dir: String,
+    #[arg(
+        long,
+        value_parser = ["linux", "win32", "darwin", "alpine"],
+    )]
+    pub platform: Option<String>,
+    #[arg(
+        long,
+        value_parser = ["x64", "arm64", "armhf"],
+    )]
+    pub arch: Option<String>,
+    #[arg(long, help = "the commit id")]
+    pub commit: Option<String>,
+    #[arg(long, help = "the output dir", default_value = "./")]
+    pub output_dir: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
