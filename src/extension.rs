@@ -126,11 +126,11 @@ impl Extension {
         let all_data = query_extension(&self.publisher, &self.package, None)?;
         let (version, platform): (Option<String>, Option<String>) = all_data
             .get("versions")
-            .map_or(None, |x| x.as_array())
+            .and_then(|x| x.as_array())
             .map_or((None, None), |x| {
                 for ver_data in x {
-                    let version = ver_data.get("version").map_or(None, |x| x.as_str());
-                    let platform = ver_data.get("targetPlatform").map_or(None, |x| x.as_str());
+                    let version = ver_data.get("version").and_then(|x| x.as_str());
+                    let platform = ver_data.get("targetPlatform").and_then(|x| x.as_str());
                     let version = match (self.version.as_ref(), version) {
                         (Some(v1), Some(v2)) => {
                             if v1 != v2 {
@@ -221,13 +221,13 @@ pub fn query_extension(
     let response = request.send()?;
     let response = response.error_for_status();
     let data = response
-        .map_or_else(|x| Err(x), |x| x.json().map(|x: json_value::Value| x))
+        .and_then(|x| x.json().map(|x: json_value::Value| x))
         .context(format!("query extension {} info failed", &ext_name))?;
     let data = data
         .get("results")
-        .map_or(None, |x| x.get(0))
-        .map_or(None, |x| x.get("extensions"))
-        .map_or(None, |x| x.get(0));
+        .and_then(|x| x.get(0))
+        .and_then(|x| x.get("extensions"))
+        .and_then(|x| x.get(0));
     match data {
         Some(val) => Ok(val.clone()),
         None => Err("no data found in query response".into()),

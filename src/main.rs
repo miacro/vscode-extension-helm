@@ -69,34 +69,25 @@ fn download_server(args: &ServerArgs) {
             || server::get_latest_release(&platform, &arch),
             |x| Ok(x.into()),
         )
-        .map_or_else(
-            |e| Err(e),
-            |v| {
-                prefix = match platform.as_str() {
-                    "alpine" => format!("cli-{}", &platform),
-                    _ => format!("server-{}", &platform),
-                };
-                commit = v;
-                Ok(())
-            },
-        )
-        .map_or_else(
-            |e| Err(e),
-            |_| {
-                let result = server::download_release_file(&commit, &prefix, &arch, &output_dir);
-                match result {
-                    Err(e) => Err(e),
-                    Ok(file_name) => {
-                        archive_file = file_name;
-                        Ok(())
-                    }
+        .and_then(|v| {
+            prefix = match platform.as_str() {
+                "alpine" => format!("cli-{}", &platform),
+                _ => format!("server-{}", &platform),
+            };
+            commit = v;
+            Ok(())
+        })
+        .and_then(|_| {
+            let result = server::download_release_file(&commit, &prefix, &arch, &output_dir);
+            match result {
+                Err(e) => Err(e),
+                Ok(file_name) => {
+                    archive_file = file_name;
+                    Ok(())
                 }
-            },
-        )
-        .map_or_else(
-            |e| Err(e),
-            |_| server::prepare_release_dir(&commit, &archive_file, &output_dir),
-        );
+            }
+        })
+        .and_then(|_| server::prepare_release_dir(&commit, &archive_file, &output_dir));
     match res {
         Ok(_) => (),
         Err(e) => {

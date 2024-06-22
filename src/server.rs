@@ -64,8 +64,8 @@ pub fn get_latest_release(platform: &String, arch: &String) -> Result<String, Bo
     let data: json_value::Value = json_from_str(&data)?;
     let commit = data
         .as_array()
-        .map_or(None, |x| x.first())
-        .map_or(None, |x| x.as_str());
+        .and_then(|x| x.first())
+        .and_then(|x| x.as_str());
     match commit {
         None => Err(format!("query vscode server commit id failed, url {}", &url).into()),
         Some(v) => Ok(v.into()),
@@ -114,7 +114,7 @@ pub fn download_release_file(
         }
     };
     let archive_ext = utils::parse_http_header_content_disposition(&head_file)
-        .map_or(None, |x| match x.rfind(".") {
+        .and_then(|x| match x.rfind(".") {
             None => None,
             Some(pos) => {
                 let ext = if x[..pos].ends_with(".tar") {
