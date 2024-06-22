@@ -7,13 +7,14 @@ use serde_json::json;
 use serde_json::value as json_value;
 use shellexpand;
 use std::error::Error;
-use std::fs::read_to_string;
 use std::fs::{self, File};
 use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 use std::path::MAIN_SEPARATOR;
 use std::process::Command;
+
+use crate::utils;
 
 #[derive(Debug)]
 pub struct Extension {
@@ -80,7 +81,6 @@ impl Extension {
             None => true,
         };
         self.check_platform()?;
-        let ext_name = self.get_extension_name();
         let (version, platform) = match &self.version {
             Some(v) => (v.clone(), self.platform.clone()),
             None => {
@@ -88,12 +88,20 @@ impl Extension {
                 let v = match v {
                     Some(v) => v,
                     None => {
+                        let ext_name = self.get_extension_name();
                         return Err(format!("query version for {} failed", &ext_name).into());
                     }
                 };
                 (v, p.clone())
             }
         };
+        let ext_name = get_extension_name(
+            &self.publisher,
+            &self.package,
+            Some(&version),
+            platform.as_deref(),
+        );
+        info!("downloading extension {}", &ext_name);
         let output_file = format!("{}{}{}.vsix", download_dir, MAIN_SEPARATOR, &ext_name);
         if cached && Path::new(&output_file).exists() {
             info!("{output_file} already exists, skip downloading");
@@ -241,7 +249,7 @@ pub fn download_extension(
     if let Some(val) = platform {
         download_url = format!("{}?targetPlatform={}", download_url, val);
     }
-    debug!("Downloading {}:\nURL: {}", &ext_name, &download_url);
+    debug!("downloading {}:\nURL: {}", &ext_name, &download_url);
     let head_file = format!("{}.header", output_file);
     let body_file = format!("{}.downloading", output_file);
     let mut curl_args = vec!["-fSL"];
@@ -256,30 +264,23 @@ pub fn download_extension(
         head_file.as_str(),
     ]);
     let prog_name = String::from("curl");
-    let mut command = Command::new(&prog_name);
-    command.args(curl_args);
-    let status = command.status();
+    let prog_text = format!("{} {}", prog_name, curl_args.join(" "));
+    debug!("exec command {}", prog_text);
+    let status = Command::new(&prog_name).args(&curl_args).status();
     match status {
         Ok(status) => {
             if !status.success() {
-                let args = command.get_args().map(|x| x.to_str().map_or("", |x| x));
-                let args: Vec<&str> = args.collect();
-                let args = args.join(" ");
-                return Err(format!("exec command {} {} failed", prog_name, args).into());
+                return Err(format!("exec command {} failed", prog_text).into());
             }
         }
         Err(e) => {
             return Err(e.into());
         }
     };
-    let mut encoding = String::from("");
-    for line in read_to_string(&head_file)?.lines() {
-        let line = line.trim().to_lowercase();
-        if line.starts_with("content-encoding") {
-            let data: Vec<&str> = line.split(":").collect();
-            encoding = data[data.len() - 1].to_string();
-        }
-    }
+    let encoding = match utils::parse_http_header_content_encoding(&head_file) {
+        None => String::from(""),
+        Some(v) => v,
+    };
     let mut f_i = File::open(&body_file)?;
     let mut data = vec![];
     f_i.read_to_end(&mut data)?;

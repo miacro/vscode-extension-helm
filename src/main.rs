@@ -1,12 +1,12 @@
 use cli::{ExtensionArgs, PortalSubcommand, ServerArgs};
 use env_logger;
 use log::{self, debug, error, info, warn};
-use std::path::MAIN_SEPARATOR;
 use std::{env, vec};
 
 mod cli;
 mod extension;
 mod server;
+mod utils;
 
 fn main() {
     let args = cli::load_args();
@@ -49,9 +49,9 @@ fn download_extensions(args: &ExtensionArgs) {
         }
     }
     if failed.len() > 0 {
-        error!("Download some failed:\n{}", failed.join(" "));
+        error!("download some failed:\n{}", failed.join(" "));
     } else {
-        info!("Download all succeed");
+        info!("download all succeed");
     }
     return;
 }
@@ -83,9 +83,14 @@ fn download_server(args: &ServerArgs) {
         .map_or_else(
             |e| Err(e),
             |_| {
-                let archive_name = format!("vscode-{}-{}-{}.tar.gz", &prefix, &arch, &commit);
-                archive_file = format!("{}{}{}", &output_dir, MAIN_SEPARATOR, &archive_name);
-                server::download_release_file(&commit, &prefix, &arch, &archive_file)
+                let result = server::download_release_file(&commit, &prefix, &arch, &output_dir);
+                match result {
+                    Err(e) => Err(e),
+                    Ok(file_name) => {
+                        archive_file = file_name;
+                        Ok(())
+                    }
+                }
             },
         )
         .map_or_else(
